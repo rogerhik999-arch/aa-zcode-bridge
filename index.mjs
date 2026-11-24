@@ -12,6 +12,10 @@ const RENDEZVOUS = process.env.AA_ZCODE_RENDEZVOUS || HOME + '/.agents-anywhere/
 const WORKBASE = process.env.AA_ZCODE_WORKBASE || '/tmp/aa-zcode-bridge/work';
 const BOOTSTRAP = HOME + '/zcode-headless/zcode.cjs';
 const INSTANCE = 'aa-bridge-' + randomBytes(4).toString('hex');
+// The manifest is the only version: the handshake and the logs name this build <name>@<version>.
+const MANIFEST = JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8'));
+function pluginLabel(manifest) { return String(manifest.name) + '@' + String(manifest.version); }
+const LABEL = pluginLabel(MANIFEST);
 const SERVICE = 'aa.zcode.v2.Bridge';
 const SYNC = 'aa.zcode.v2.Sync';
 const PREFS_REPLY = { nativeSearchEnhancementsEnabled: false };
@@ -371,7 +375,7 @@ async function handleCall(w, f) {
   const fail = (code, message) => w.send(JSON.stringify({ kind: 'call.error', call_id: f.call_id, error: { code, message, retryable: false } }));
   try {
     if (f.method === 'initialize') {
-      reply({ protocolVersion: '0.2', plugin: 'aa-bridge-v3.6.1', instance: INSTANCE, pid: process.pid, node: process.version });
+      reply({ protocolVersion: '0.2', plugin: LABEL, instance: INSTANCE, pid: process.pid, node: process.version });
     } else if (f.method === 'sessionStart') {
       const wsPath = (f.payload && f.payload.workspacePath) || WORKBASE;
       const r = await app.call('session/create', { workspace: { workspacePath: wsPath, workspaceKey: wsPath } }, 30000);
@@ -485,7 +489,7 @@ export async function main() {
   globalThis.__AA_BRIDGE_ACTIVATED = true;
   log('activate (guarded)');
 
-  log('=== aa-bridge-v3 START pid=' + process.pid + ' workbase=' + WORKBASE);
+  log('=== ' + LABEL + ' START pid=' + process.pid + ' workbase=' + WORKBASE);
   serverConn = await connectRouter('server');
   clientConn = await connectRouter('client');
   // v0.3.1: health-check supervision. A connection object can outlive its
@@ -504,7 +508,7 @@ export async function main() {
     }
   }, 5000);
   const srv = createServer((s) => {
-    s.on('data', () => { try { s.write(JSON.stringify({ proto: 'aa-bridge-v3', alive: true, ts: Date.now() }) + '\n'); } catch (e) {} });
+    s.on('data', () => { try { s.write(JSON.stringify({ proto: 'aa-bridge-v3', alive: true, ts: Date.now(), plugin: LABEL }) + '\n'); } catch (e) {} });
   });
   srv.on('error', (e) => log('ops.sock.error ' + e.message));
   try { require_unlink(OPSOCK); } catch (e) {}

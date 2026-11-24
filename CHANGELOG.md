@@ -1,5 +1,29 @@
 # aa-bridge plugin changelog
 
+## 0.3.1 (2026-11-25)
+
+Event sync queue fixes. Evidence: the connector log of 2026-11-24 (12 relays alive at once, every
+backend reconnect adding one) and the marker log of the same plugin lifetime (274 subscriptions opened,
+228 of them cancelled by the Connector, none of them dropped by the plugin).
+
+- An ack removes exactly the events that were sent. A flush sent the first 50 events but recorded the
+  whole queue as pending, so events 51..N were discarded without ever leaving the plugin (a queue of
+  120 events delivers 51 on 0.3.0 and 120 on 0.3.1).
+- `call.cancel` on a sync stream ends that subscription; the Connector sends it whenever a relay
+  closes. Only the plugin's own server socket closing removed subscriptions before, so every reconnect
+  left one behind and each event was sent to all of them.
+- Losing the client connection releases the batches in flight, so a subscription no longer stalls until
+  its stream also closes; what was queued is sent once the connection is back. A close event from a
+  connection that was already replaced no longer clears the new one.
+- An ingest call that gets no answer for 35 s is sent again under the same batch number with a new call
+  id. Repeat and late answers are ignored. **Install order: the Connector first, at fleet PR #16 or
+  later.** It answers a re-sent batch number without applying it twice; an older Connector applies it
+  again and the text of that message appears twice.
+- A queue past 500 events still refuses new ones (backpressure) but counts and logs them
+  (`sync.queue-full`) instead of losing them silently.
+- The ops socket reply adds `subscriptions` and `queued`.
+- Tests: `tests/plugin_sync_queue_test.mjs`, 32 checks.
+
 ## 0.3.0 (2026-11-25)
 
 First release from the plugin's own repository (aa-zcode-bridge). Until now the source lived in the decision

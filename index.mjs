@@ -22,6 +22,12 @@ const LABEL = pluginLabel(MANIFEST);
 const SERVICE = 'aa.zcode.v2.Bridge';
 const SYNC = 'aa.zcode.v2.Sync';
 const PREFS_REPLY = { nativeSearchEnhancementsEnabled: false };
+// Event sync queue (aa.zcode.v2.Sync). The Connector acks a batch by answering its call.
+// Exactly the events sent are removed on ack; a batch number is never reused for other
+// events, and the Connector answers a re-sent number without applying it twice.
+const MAX_BATCH_EVENTS = 50;       // events per ingestBatch call
+const MAX_QUEUED_EVENTS = 500;     // per subscription; past this new events are counted and dropped
+const INGEST_TIMEOUT_MS = 35000;   // no answer by then: the call is gone, send the batch again
 function require_unlink(p) { try { unlinkSync(p); } catch (e) {} }
 const log = (m) => { try { appendFileSync(LOG, new Date().toISOString() + ' | ' + m + '\n'); } catch (e) {} };
 
@@ -188,7 +194,8 @@ class AppServer {
 // ---------- bridge wiring ----------
 let serverConn = null;
 let clientConn = null;
-const subscriptions = new Map();  // subId -> { seq, batch, nextBatch, inFlight, ws }
+const subscriptions = new Map();  // subId -> { batch, nextBatch, inFlight, pendingAck, callId, attempt, sentAt, dropped }
+const streamCalls = new Map();    // sync stream call_id -> subId (a call.cancel names the stream, not the subscription)
 const pendingPerm = new Map();    // String(zcode params.requestId) -> { as, rawId (latest JSON-RPC id), allow, deny, fallback, at, zsid, title }
 const PERM_TIMEOUT_MS = 10 * 60 * 1000;
 const sessionDirs = new Map();  // zsid -> workspace path the session was created in (= zcode project)
@@ -252,25 +259,60 @@ const permSweep = setInterval(() => {
 }, 30000);
 if (permSweep.unref) permSweep.unref();
 
+const connOpen = (c) => !!c && !!c.sock && c.sock.readyState === 1;
+
 function flushSubscription(subId) {
   const sub = subscriptions.get(subId);
   if (!sub || sub.inFlight || sub.batch.length === 0) return;
-  if (!clientConn) return;
+  if (!connOpen(clientConn)) return;   // stays queued; sent once the client connection is back
+  const events = sub.batch.slice(0, MAX_BATCH_EVENTS);
   sub.inFlight = true;
-  const callId = 'batch-' + subId.slice(0, 8) + '-' + sub.nextBatch;
-  const payload = { batch: { subscriptionId: subId, batchNumber: sub.nextBatch, events: sub.batch.slice(0, 50) } };
-  sub.pendingAck = sub.batch.length;
+  // Every attempt gets its own call id, so a late answer to an earlier one is
+  // ignored; the batch number stays until the batch is acked.
+  const callId = 'batch-' + subId.slice(0, 8) + '-' + sub.nextBatch + '-' + (++sub.attempt);
+  const payload = { batch: { subscriptionId: subId, batchNumber: sub.nextBatch, events } };
+  sub.pendingAck = events.length;      // exactly what was sent: an ack removes nothing else
   clientConn.send(JSON.stringify({ kind: 'call.open', call_id: callId, service: SYNC, method: 'ingestBatch', payload, timeout_ms: 30000 }));
   sub.callId = callId;
+  sub.sentAt = Date.now();
+}
+
+function flushAll() {
+  for (const subId of Array.from(subscriptions.keys())) flushSubscription(subId);
+}
+
+function releaseInFlight(reason) {
+  // The call went out on a connection that is gone: its answer will never come.
+  for (const [subId, sub] of subscriptions) {
+    if (!sub.inFlight) continue;
+    sub.inFlight = false;
+    sub.callId = null;
+    log('sync.release sub=' + subId.slice(0, 8) + ' batch=' + sub.nextBatch + ' reason=' + reason);
+  }
+}
+
+function retryTimedOut(now) {
+  // No answer within INGEST_TIMEOUT_MS: send the batch again under its number.
+  for (const [subId, sub] of subscriptions) {
+    if (!sub.inFlight || now - sub.sentAt < INGEST_TIMEOUT_MS) continue;
+    log('sync.ingest-timeout sub=' + subId.slice(0, 8) + ' batch=' + sub.nextBatch + ' after_ms=' + (now - sub.sentAt));
+    sub.inFlight = false;
+    sub.callId = null;
+    flushSubscription(subId);
+  }
 }
 
 function ackSubscription(callId, ok) {
   for (const [subId, sub] of subscriptions) {
+    // Only the attempt in flight counts; a repeat answer, or one to an attempt
+    // that was released or timed out, must not remove events a second time.
     if (sub.callId !== callId) continue;
     sub.inFlight = false;
+    sub.callId = null;
     if (ok) {
       sub.batch = sub.batch.slice(sub.pendingAck);
       sub.nextBatch += 1;
+      sub.attempt = 0;
       flushSubscription(subId);
     }
     return;
@@ -280,10 +322,30 @@ function ackSubscription(callId, ok) {
 function syncIngest(method, params) {
   const raw = { method, params };
   for (const [subId, sub] of subscriptions) {
-    if (sub.batch.length > 500) continue;  // backpressure guard
+    if (sub.batch.length >= MAX_QUEUED_EVENTS) {  // backpressure guard: counted, never silent
+      sub.dropped += 1;
+      if (sub.dropped === 1 || sub.dropped % 1000 === 0) log('sync.queue-full sub=' + subId.slice(0, 8) + ' dropped=' + sub.dropped);
+      continue;
+    }
     sub.batch.push(raw);
     flushSubscription(subId);
   }
+}
+
+function cancelSubscription(callId) {
+  // The Connector ended a sync stream: call.cancel names the stream's call id.
+  const subId = streamCalls.get(callId);
+  if (!subId) return false;
+  streamCalls.delete(callId);
+  subscriptions.delete(subId);
+  log('sync.cancelled ' + subId.slice(0, 12) + ' call=' + callId.slice(0, 10));
+  return true;
+}
+
+function queuedEvents() {
+  let n = 0;
+  for (const sub of subscriptions.values()) n += sub.batch.length;
+  return n;
 }
 
 const app = new AppServer((method, params) => {
@@ -344,6 +406,7 @@ async function connectRouter(role) {
         log('sent server.register');
       }
       if (f.kind === 'server.register.ack') log('REGISTER.ACK');
+      if (f.kind === 'call.cancel') { cancelSubscription(String(f.call_id)); return; }
       if (f.kind === 'call.open') handleCall(w, f);
       return;
     }
@@ -353,7 +416,13 @@ async function connectRouter(role) {
       if (f.kind === 'call.error') log('ingestBatch rejected: ' + JSON.stringify(f.error).slice(0, 140));
     }
   });
-  w.on('close', (code, reason) => { log(role + ' closed code=' + code + ' reason=' + (reason || '').slice(0, 100) + ' — reconnect 5s'); if (role === 'server') serverConn = null; else clientConn = null; });
+  w.on('close', (code, reason) => {
+    log(role + ' closed code=' + code + ' reason=' + (reason || '').slice(0, 100) + ' — reconnect 5s');
+    if (role === 'server') { if (serverConn === w) serverConn = null; return; }
+    // Calls in flight on this socket will never be answered; the batches stay queued.
+    releaseInFlight('client-closed');
+    if (clientConn === w) clientConn = null;   // a replaced connection is not this one
+  });
   w.on('error', (e) => log(role + ' error ' + e.message));
   w.send(JSON.stringify({ kind: 'hello', protocol: 'meshcall/1', role, peer_id: 'aa-bridge-' + role, instance_id: INSTANCE }));
   startKeepalive(w, role);
@@ -367,11 +436,12 @@ async function handleCall(w, f) {
   if (m === 'sync') {
       const subId = String(payload.subscriptionId || '');
       if (!subId) throw new Error('subscriptionId required');
-      const sub = { seq: 0, batch: [], nextBatch: 1, inFlight: false, pendingAck: 0, callId: null };
+      const sub = { batch: [], nextBatch: 1, inFlight: false, pendingAck: 0, callId: null, attempt: 0, sentAt: 0, dropped: 0 };
       subscriptions.set(subId, sub);
+      streamCalls.set(String(f.call_id), subId);
       w.send(JSON.stringify({ kind: 'stream.item', call_id: f.call_id, direction: 'server', sequence: 0, payload: { kind: 'subscribed', subscriptionId: subId } }));
       log('sync.subscribed ' + subId.slice(0, 12) + ' call=' + String(f.call_id).slice(0, 10));
-      w.on('close', () => { subscriptions.delete(subId); });
+      w.on('close', () => { subscriptions.delete(subId); streamCalls.delete(String(f.call_id)); });
       return;  // stream stays open; more items can follow
     }
   const reply = (payload) => w.send(JSON.stringify({ kind: 'call.result', call_id: f.call_id, payload }));
@@ -495,12 +565,14 @@ export async function main() {
   log('=== ' + LABEL + ' START pid=' + process.pid + ' workbase=' + WORKBASE);
   serverConn = await connectRouter('server');
   clientConn = await connectRouter('client');
+  flushAll();
   // v0.3.1: health-check supervision. A connection object can outlive its
   // socket (zombie: readyState !== 1 but never emits close), so null-checks
   // alone never reconnect. Terminate anything not OPEN, then reconnect; the
   // server connection re-registers its services on hello.ack.
   const connHealthy = (c) => c && c.sock && c.sock.readyState === 1;
   setInterval(async () => {
+    retryTimedOut(Date.now());
     if (!connHealthy(serverConn)) {
       try { if (serverConn && serverConn.sock) serverConn.sock.terminate(); } catch (e) {}
       serverConn = await connectRouter('server');
@@ -508,10 +580,11 @@ export async function main() {
     if (!connHealthy(clientConn)) {
       try { if (clientConn && clientConn.sock) clientConn.sock.terminate(); } catch (e) {}
       clientConn = await connectRouter('client');
+      flushAll();
     }
   }, 5000);
   const srv = createServer((s) => {
-    s.on('data', () => { try { s.write(JSON.stringify({ proto: 'aa-bridge-v3', alive: true, ts: Date.now(), plugin: LABEL }) + '\n'); } catch (e) {} });
+    s.on('data', () => { try { s.write(JSON.stringify({ proto: 'aa-bridge-v3', alive: true, ts: Date.now(), plugin: LABEL, subscriptions: subscriptions.size, queued: queuedEvents() }) + '\n'); } catch (e) {} });
   });
   srv.on('error', (e) => log('ops.sock.error ' + e.message));
   try { require_unlink(OPSOCK); } catch (e) {}

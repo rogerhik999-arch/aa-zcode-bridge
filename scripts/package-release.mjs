@@ -29,7 +29,8 @@ if (!/^\d+\.\d+\.\d+$/.test(String(manifest.version))) fail('manifest version is
 for (const p of shipped) {
   if (git(['cat-file', '-e', ref + ':' + p]).status !== 0) fail(ref + ' has no ' + p + ' — a release needs it');
 }
-const commit = git(['rev-parse', '--short=10', ref]).stdout.trim();
+// The commit, not the tag object: an annotated tag has an id of its own.
+const commit = git(['rev-parse', '--short=10', ref + '^{commit}']).stdout.trim() || git(['rev-parse', '--short=10', ref]).stdout.trim();
 
 const file = manifest.name + '-' + manifest.version + '.zip';
 const out = join(root, 'dist', file);

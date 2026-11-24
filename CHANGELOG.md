@@ -1,5 +1,15 @@
 # aa-bridge plugin changelog
 
+## 0.3.2 (2026-11-25)
+
+Where the plugin keeps its marker log and its ops socket.
+
+- Both now default to the directory of the rendezvous file (`~/.agents-anywhere/zcode-bridge`, where
+  the Connector publishes `connector.json`) instead of the directory the plugin was developed in. That
+  directory exists on one machine only; everywhere else the marker log was silently never written.
+  The plugin creates the directory when it does not exist. `AA_ZCODE_LOG` / `AA_ZCODE_OPSOCK` still
+  override both paths.
+
 ## 0.3.1 (2026-11-25)
 
 Event sync queue fixes. Evidence: the connector log of 2026-11-24 (12 relays alive at once, every

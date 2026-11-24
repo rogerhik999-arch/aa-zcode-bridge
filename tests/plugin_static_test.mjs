@@ -21,6 +21,8 @@ check('CHANGELOG has an entry for the manifest version',
   readFileSync(join(root, 'CHANGELOG.md'), 'utf8').includes(String(manifest.version)));
 
 check('source names no home directory', !/\/(Users|home)\//.test(src));
+check('the log and the ops socket default next to the rendezvous, never to a development directory',
+  !/dsh-workspace/.test(src) && /STATE_DIR \+ '\/v3-marker\.log'/.test(src) && /STATE_DIR \+ '\/v3-bridge\.sock'/.test(src));
 check('handshake reply carries the label, not a literal', /plugin: LABEL,/.test(src) && !/aa-bridge-v\d+\.\d/.test(src));
 
 // pluginLabel() has no nested braces, so its source is matched however it is formatted.

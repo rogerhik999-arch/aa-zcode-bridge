@@ -36,8 +36,8 @@ zcode 的插件宿主（`__zcode-plugin-host`）导入 `index.mjs` 并调用 `ma
 |---|---|---|
 | `AA_ZCODE_RENDEZVOUS` | `~/.agents-anywhere/zcode-bridge/connector.json` | 会合文件；连接器拉起宿主时会设置 |
 | `AA_ZCODE_WORKBASE` | `/tmp/aa-zcode-bridge/work` | app-server 的工作目录 |
-| `AA_ZCODE_LOG` | `~/Documents/dsh-workspace/zcode-adapter/v3-marker.log` | 标记日志；沿用开发时的位置，换机器请覆盖 |
-| `AA_ZCODE_OPSOCK` | `~/Documents/dsh-workspace/zcode-adapter/v3-bridge.sock` | ops 套接字；连上后回一行 JSON（`alive`、`plugin`） |
+| `AA_ZCODE_LOG` | 会合文件所在目录下的 `v3-marker.log`（即 `~/.agents-anywhere/zcode-bridge/v3-marker.log`） | 标记日志；0.3.2 起跟着会合文件走（0.3.1 及以前默认在开发目录，别的机器上写不出来） |
+| `AA_ZCODE_OPSOCK` | 会合文件所在目录下的 `v3-bridge.sock` | ops 套接字；连上后回一行 JSON（`alive`、`plugin`） |
 | `AA_ZCODE_BOOTSTRAP` | `~/zcode-headless/zcode.cjs` | zcode 的 headless CLI 包（app-server 与插件宿主的入口），需要另行安装 |
 
 家目录取自操作系统（`os.homedir()`），源码里不写任何一台机器的路径。

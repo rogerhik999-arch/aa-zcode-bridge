@@ -3,14 +3,19 @@ import { createServer, connect } from 'node:net';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
+import { dirname } from 'node:path';
 
 // Every path derives from the OS home directory; nothing names one machine.
 const HOME = homedir();
-// The marker log and the ops socket still live in the working directory the plugin
-// was developed in; AA_ZCODE_LOG / AA_ZCODE_OPSOCK override them per host.
-const LOG = process.env.AA_ZCODE_LOG || HOME + '/Documents/dsh-workspace/zcode-adapter/v3-marker.log';
-const OPSOCK = process.env.AA_ZCODE_OPSOCK || HOME + '/Documents/dsh-workspace/zcode-adapter/v3-bridge.sock';
+// The marker log and the ops socket live next to the rendezvous file the Connector publishes for
+// this host, so no machine has to remember a path. (Up to 0.3.1 they defaulted to the directory the
+// plugin was developed in, which exists on one machine only: elsewhere the log was never written.)
+// AA_ZCODE_LOG / AA_ZCODE_OPSOCK override them per host.
 const RENDEZVOUS = process.env.AA_ZCODE_RENDEZVOUS || HOME + '/.agents-anywhere/zcode-bridge/connector.json';
+const STATE_DIR = dirname(RENDEZVOUS);
+try { mkdirSync(STATE_DIR, { recursive: true }); } catch (e) {}
+const LOG = process.env.AA_ZCODE_LOG || STATE_DIR + '/v3-marker.log';
+const OPSOCK = process.env.AA_ZCODE_OPSOCK || STATE_DIR + '/v3-bridge.sock';
 const WORKBASE = process.env.AA_ZCODE_WORKBASE || '/tmp/aa-zcode-bridge/work';
 // zcode's headless CLI bundle: the app-server and __zcode-plugin-host entry.
 const BOOTSTRAP = process.env.AA_ZCODE_BOOTSTRAP || HOME + '/zcode-headless/zcode.cjs';

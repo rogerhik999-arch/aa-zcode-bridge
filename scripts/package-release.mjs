@@ -59,9 +59,12 @@ const stray = files.filter((f) => !allowed(f));
 if (stray.length) fail('zip contains files outside the shipped set: ' + stray.join(', '));
 
 // The artifact has to pass the same tests as the working tree.
+// The test log goes to stderr, so stdout stays machine-readable (the JSON below).
 const test = spawnSync(process.execPath, [join(root, 'tests', 'run.mjs')], {
-  cwd: root, stdio: 'inherit', env: { ...process.env, AA_BRIDGE_ENTRY: join(tmp, 'index.mjs') },
+  cwd: root, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8',
+  env: { ...process.env, AA_BRIDGE_ENTRY: join(tmp, 'index.mjs') },
 });
+process.stderr.write(test.stdout + test.stderr);
 rmSync(tmp, { recursive: true, force: true });
 if (test.status !== 0) {
   rmSync(out, { force: true });

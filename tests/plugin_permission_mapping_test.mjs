@@ -1,10 +1,13 @@
-// Unit-tests the pure helpers of plugin/aa-bridge/index.mjs by extracting their source.
+// Unit-tests the pure helpers of index.mjs by extracting their source.
+// Targets the checked-in index.mjs, or the one AA_BRIDGE_ENTRY points at (the release packaging runs
+// the same tests against the extracted zip).
 // Run: node tests/plugin_permission_mapping_test.mjs [path/to/index.mjs]
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 
-const file = process.argv[2] || new URL('../plugin/aa-bridge/index.mjs', import.meta.url).pathname;
+const file = process.argv[2] || process.env.AA_BRIDGE_ENTRY || fileURLToPath(new URL('../index.mjs', import.meta.url));
 const src = readFileSync(file, 'utf8');
 function extract(name) {
   const start = src.indexOf('function ' + name + '(');

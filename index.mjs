@@ -6,11 +6,14 @@ import { homedir } from 'node:os';
 
 // Every path derives from the OS home directory; nothing names one machine.
 const HOME = homedir();
-const LOG = HOME + '/Documents/dsh-workspace/zcode-adapter/v3-marker.log';
-const OPSOCK = HOME + '/Documents/dsh-workspace/zcode-adapter/v3-bridge.sock';
+// The marker log and the ops socket still live in the working directory the plugin
+// was developed in; AA_ZCODE_LOG / AA_ZCODE_OPSOCK override them per host.
+const LOG = process.env.AA_ZCODE_LOG || HOME + '/Documents/dsh-workspace/zcode-adapter/v3-marker.log';
+const OPSOCK = process.env.AA_ZCODE_OPSOCK || HOME + '/Documents/dsh-workspace/zcode-adapter/v3-bridge.sock';
 const RENDEZVOUS = process.env.AA_ZCODE_RENDEZVOUS || HOME + '/.agents-anywhere/zcode-bridge/connector.json';
 const WORKBASE = process.env.AA_ZCODE_WORKBASE || '/tmp/aa-zcode-bridge/work';
-const BOOTSTRAP = HOME + '/zcode-headless/zcode.cjs';
+// zcode's headless CLI bundle: the app-server and __zcode-plugin-host entry.
+const BOOTSTRAP = process.env.AA_ZCODE_BOOTSTRAP || HOME + '/zcode-headless/zcode.cjs';
 const INSTANCE = 'aa-bridge-' + randomBytes(4).toString('hex');
 // The manifest is the only version: the handshake and the logs name this build <name>@<version>.
 const MANIFEST = JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8'));

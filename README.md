@@ -60,9 +60,9 @@ node tests/run.mjs
 1. 改 `plugin.json` 的版本，在 `CHANGELOG.md` 顶部补一条，提交；
 2. `git tag v<版本>` 并推送；
 3. `node scripts/package-release.mjs v<版本>`：用 `git archive` 从这个 tag 出 `dist/aa-bridge-reg-<版本>.zip` 和 `.sha256`，再对解压出来的副本跑全部测试，不过就删包；
-4. 把 zip 和 `.sha256` 挂到 GitHub Release，marketplace 条目用脚本打印的那一段。
+4. `scripts/publish-release.sh v<版本> [发行说明.md]`：建这个 tag 的 GitHub Release（已有就复用，同名文件先替换），上传 zip 和 `.sha256`，再把两个文件经 API 下载回来与本地构建比对，不一致就报错退出。token 取自 `git credential fill`，不落盘不打印。marketplace 条目用打包脚本打印的那一段。
 
-CI 在每次推送上做同样的事（Node 22 / 24）。CI 只负责验证，不留产物；发行物是挂在 GitHub Release 上的 zip 和 `.sha256`。
+CI 在每次推送上做同样的事，外加 `bash -n` 检查 shell 脚本的语法（Node 22 / 24）。CI 只负责验证，不留产物；发行物是挂在 GitHub Release 上的 zip 和 `.sha256`。
 
 ## 历史
 

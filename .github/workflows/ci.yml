@@ -24,7 +24,9 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Syntax
         run: node --check index.mjs
-      - name: Tests (permission mapping, static checks, sandboxed boot)
+      - name: Tests (permission mapping, sync queue, static checks, sandboxed boot)
         run: node tests/run.mjs
+      - name: Shell syntax
+        run: bash -n scripts/*.sh
       - name: Release zip from the committed tree, tested after extraction
         run: node scripts/package-release.mjs HEAD

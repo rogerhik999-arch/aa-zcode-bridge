@@ -28,7 +28,7 @@ zcode 的插件宿主（`__zcode-plugin-host`）导入 `index.mjs` 并调用 `ma
 
 `node scripts/package-release.mjs v<版本>` 会原样打印这段条目。zip 来源要求这个仓库是公开的，或者 zcode 拿得到凭据。
 
-**连接器怎么找到插件**：fleet fork 的连接器自己拉起插件宿主，默认读 `~/.zcode/cli/plugins/cache/aa-local/aa-bridge/<版本>/index.mjs`，其中的默认版本写在连接器代码里。要让它跑别的版本，在连接器配置的 `values.plugin` 里写明 `index.mjs` 的完整路径，然后重启连接器。
+**连接器怎么找到插件**：fleet fork 的连接器自己拉起插件宿主，并按 zcode 的插件登记表找插件——`~/.zcode/cli/plugins/installed_plugins.json` 里 `aa-bridge@aa-local` 条目的 `installPath` 指向哪个版本就加载哪个；没有登记条目时取 `~/.zcode/cli/plugins/cache/aa-local/aa-bridge/` 下版本号最高的目录。换版本 = 用 zcode 装上新版本（登记表随之更新），然后重启连接器。连接器自己不钉版本（[fleet PR #14](https://github.com/rogerhik999-arch/agents-anywhere/pull/14) 之前它写死加载 0.2.2）。
 
 ## 路径
 
@@ -62,7 +62,7 @@ node tests/run.mjs
 3. `node scripts/package-release.mjs v<版本>`：用 `git archive` 从这个 tag 出 `dist/aa-bridge-reg-<版本>.zip` 和 `.sha256`，再对解压出来的副本跑全部测试，不过就删包；
 4. 把 zip 和 `.sha256` 挂到 GitHub Release，marketplace 条目用脚本打印的那一段。
 
-CI 在每次推送上做同样的事，并保留 Node 24 的 zip。
+CI 在每次推送上做同样的事（Node 22 / 24）。CI 只负责验证，不留产物；发行物是挂在 GitHub Release 上的 zip 和 `.sha256`。
 
 ## 历史
 

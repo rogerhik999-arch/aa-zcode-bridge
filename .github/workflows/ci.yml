@@ -28,10 +28,3 @@ jobs:
         run: node tests/run.mjs
       - name: Release zip from the committed tree, tested after extraction
         run: node scripts/package-release.mjs HEAD
-      - name: Keep the zip and its checksum
-        if: matrix.node == '24'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-zip
-          path: dist/
-          if-no-files-found: error

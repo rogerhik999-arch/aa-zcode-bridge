@@ -1,5 +1,22 @@
 # aa-bridge plugin changelog
 
+## 0.3.0 (2026-11-25)
+
+First release from the plugin's own repository (aa-zcode-bridge). Until now the source lived in the decision
+repository (agents-anywhere-zcode, `plugin/aa-bridge/`) and was copied into the install by hand; the first
+commit here is that 0.2.2, byte-identical to what was installed.
+
+- The home directory comes from the OS (`os.homedir()`) instead of the literal `/Users/rogerhi`. Paths are
+  unchanged on the machine it runs on.
+- The `initialize()` reply, the start-up log line and the ops socket reply name the build
+  `aa-bridge-reg@<version>`, read from `plugin.json`. This replaces the ad-hoc `aa-bridge-v3.6.1` label.
+  `protocolVersion` stays `0.2`; the ops socket's `proto` stays `aa-bridge-v3` (a protocol name, not a version).
+- `AA_ZCODE_LOG`, `AA_ZCODE_OPSOCK` and `AA_ZCODE_BOOTSTRAP` override the marker log, the ops socket and the
+  path of zcode's headless CLI bundle. Defaults are unchanged.
+- Removed the unused constant that pointed at the ZCode.app binary; the plugin never launches it.
+- Tests: permission mapping (moved from the decision repository), static checks, and a sandboxed boot.
+- Release zip: `git archive` of the tag, tested after extraction before it is kept.
+
 ### 0.2.2 (rev. 2026-11-24 01:40-02:46 - in-place revisions, version not bumped)
 - Recorded after the fact (2026-11-24): during G0 the canonical copy was edited and synced to the installed copy without a manifest bump, and the
   initialize() reply labelled itself `aa-bridge-v3.6` / `aa-bridge-v3.6.1` (ad-hoc numbering in the commit messages, not a version). Manifest stays 0.2.2.

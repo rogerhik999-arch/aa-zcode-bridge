@@ -2,13 +2,14 @@ import { appendFileSync, readFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { createServer, connect } from 'node:net';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
 
-const HOME = '/Users/rogerhi';
+// Every path derives from the OS home directory; nothing names one machine.
+const HOME = homedir();
 const LOG = HOME + '/Documents/dsh-workspace/zcode-adapter/v3-marker.log';
 const OPSOCK = HOME + '/Documents/dsh-workspace/zcode-adapter/v3-bridge.sock';
 const RENDEZVOUS = process.env.AA_ZCODE_RENDEZVOUS || HOME + '/.agents-anywhere/zcode-bridge/connector.json';
 const WORKBASE = process.env.AA_ZCODE_WORKBASE || '/tmp/aa-zcode-bridge/work';
-const ZCODE = '/Applications/ZCode.app/Contents/MacOS/ZCode';
 const BOOTSTRAP = HOME + '/zcode-headless/zcode.cjs';
 const INSTANCE = 'aa-bridge-' + randomBytes(4).toString('hex');
 const SERVICE = 'aa.zcode.v2.Bridge';

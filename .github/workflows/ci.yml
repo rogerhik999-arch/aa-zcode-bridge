@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax
+        run: node --check index.mjs
+      - name: Tests (permission mapping, static checks, sandboxed boot)
+        run: node tests/run.mjs
+      - name: Release zip from the committed tree, tested after extraction
+        run: node scripts/package-release.mjs HEAD
+      - name: Keep the zip and its checksum
+        if: matrix.node == '24'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-zip
+          path: dist/
+          if-no-files-found: error

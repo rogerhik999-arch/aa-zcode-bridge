@@ -1,6 +1,6 @@
 {
   "name": "aa-bridge-reg",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Runtime bridge v2 (rev5 dual-host: standalone plugin-host or desktop extension host)",
   "main": "index.mjs",
   "activationEvents": [

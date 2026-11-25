@@ -1,5 +1,27 @@
 # aa-bridge plugin changelog
 
+## 0.3.3 (2026-11-25)
+
+Resume an existing session in the host that is running now (`sessionResume`; handshake protocol `0.3`).
+
+- Symptom (Connector log, 2026-11-24 02:48:44 and 02:48:50): after the Connector restarted, or the plugin
+  host was respawned, a session the user had opened earlier could not take a message. The new host is a new
+  app-server in which that session was never loaded, so `session/setModel` and `session/send` fail with
+  `-32004 Session is not active`. Every Connector deployment made the user reopen the session.
+- `sessionResume {zcodeSessionId}` calls the app-server's `session/resume`, then `session/subscribe`
+  (`desktop-continuous`) as `sessionStart` does after `session/create`, and answers
+  `{zcodeSessionId, resumed: true, subscribed}`. A resume the app-server rejects is answered as
+  `session_resume_failed` carrying the app-server's own error (for example `Session not found: sess_...`);
+  nothing is subscribed. A request without `zcodeSessionId` is `invalid_params`.
+- The `initialize` reply now says `protocolVersion: "0.3"` and lists the optional methods in
+  `capabilities: ["sessionResume"]`. The Connector goes by that list, so it is deployed first: with a
+  plugin of 0.3.2 or older (protocol `0.2`, no `capabilities`) it sends without resuming, as before.
+- The plugin keeps no record of which sessions are active. The Connector remembers the sessions it
+  activated in the running host, forgets them when the host changes, and calls `sessionResume` before the
+  `sessionSelect` and `sessionSend` of a turn.
+- Tests: `tests/plugin_session_resume_test.mjs` runs the real plugin against a stand-in Router and a
+  stand-in app-server (`tests/fake-app-server.mjs`).
+
 ## 0.3.2 (2026-11-25)
 
 Where the plugin keeps its marker log and its ops socket.

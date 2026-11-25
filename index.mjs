@@ -26,6 +26,11 @@ function pluginLabel(manifest) { return String(manifest.name) + '@' + String(man
 const LABEL = pluginLabel(MANIFEST);
 const SERVICE = 'aa.zcode.v2.Bridge';
 const SYNC = 'aa.zcode.v2.Sync';
+// Handshake (initialize). Protocol 0.3 adds sessionResume. `capabilities` names the optional
+// methods this host implements: a plugin of protocol 0.2 answers without the list, so a Connector
+// talking to one sends without resuming exactly as before (the Connector is deployed first).
+const PROTOCOL_VERSION = '0.3';
+const CAPABILITIES = ['sessionResume'];
 const PREFS_REPLY = { nativeSearchEnhancementsEnabled: false };
 // Event sync queue (aa.zcode.v2.Sync). The Connector acks a batch by answering its call.
 // Exactly the events sent are removed on ack; a batch number is never reused for other
@@ -398,6 +403,7 @@ async function connectRouter(role) {
           services: [{ name: SERVICE, methods: [
             { name: 'initialize', stream: 'unary', balance: { kind: 'disabled' } },
             { name: 'sessionStart', stream: 'unary', balance: { kind: 'disabled' } },
+            { name: 'sessionResume', stream: 'unary', balance: { kind: 'disabled' } },
             { name: 'sessionSend', stream: 'unary', balance: { kind: 'disabled' } },
             { name: 'sessionStop', stream: 'unary', balance: { kind: 'disabled' } },
             { name: 'sessionList', stream: 'unary', balance: { kind: 'disabled' } },
@@ -453,7 +459,7 @@ async function handleCall(w, f) {
   const fail = (code, message) => w.send(JSON.stringify({ kind: 'call.error', call_id: f.call_id, error: { code, message, retryable: false } }));
   try {
     if (f.method === 'initialize') {
-      reply({ protocolVersion: '0.2', plugin: LABEL, instance: INSTANCE, pid: process.pid, node: process.version });
+      reply({ protocolVersion: PROTOCOL_VERSION, plugin: LABEL, instance: INSTANCE, pid: process.pid, node: process.version, capabilities: CAPABILITIES });
     } else if (f.method === 'sessionStart') {
       const wsPath = (f.payload && f.payload.workspacePath) || WORKBASE;
       const r = await app.call('session/create', { workspace: { workspacePath: wsPath, workspaceKey: wsPath } }, 30000);
@@ -462,6 +468,27 @@ async function handleCall(w, f) {
       try { await app.call('session/subscribe', { sessionId: zsid, deliveryKind: 'desktop-continuous' }, 15000); log('subscribe OK ' + zsid); } catch (e) { log('subscribe FAIL ' + e.message); }
       log('sessionStart -> ' + zsid);
       reply({ zcodeSessionId: zsid, raw: r || null });
+    } else if (f.method === 'sessionResume') {
+      // 0.3.3 (protocol 0.3): activate an EXISTING session in this host, then do what
+      // sessionStart does after session/create. After a Connector restart or a plugin
+      // respawn this is a new app-server in which the session was never loaded, and both
+      // session/setModel and session/send fail with -32004 "Session is not active".
+      // A resume the app-server rejects is answered with that error, never swallowed.
+      const zsid = f.payload && f.payload.zcodeSessionId;
+      if (!zsid) { fail('invalid_params', 'sessionResume requires zcodeSessionId'); return; }
+      let r;
+      try { r = await app.call('session/resume', { sessionId: zsid }, 90000); }
+      catch (e) {
+        log('sessionResume FAIL ' + zsid + ' ' + (e.message || e));
+        fail('session_resume_failed', String(e.message || e).slice(0, 200));
+        return;
+      }
+      const wsPath = (r && r.session && r.session.workspace && r.session.workspace.workspacePath) || '';
+      if (wsPath) sessionDirs.set(zsid, wsPath);
+      let subscribed = false;
+      try { await app.call('session/subscribe', { sessionId: zsid, deliveryKind: 'desktop-continuous' }, 15000); subscribed = true; } catch (e) { log('subscribe FAIL ' + e.message); }
+      log('sessionResume -> ' + zsid + ' subscribed=' + subscribed);
+      reply({ zcodeSessionId: zsid, resumed: true, subscribed });
     } else if (f.method === 'modelCatalog') {
       // 0.2.2: list providers/models from zcode's static provider config.
       // Catalog must be answerable without a live app-server session.

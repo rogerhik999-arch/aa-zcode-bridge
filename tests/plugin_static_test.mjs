@@ -36,11 +36,16 @@ const registered = [...src.matchAll(/\{ name: '(\w+)', stream: '(?:unary|server_
 const handled = new Set(['sync']);
 for (const m of src.matchAll(/f\.method === '(\w+)'/g)) handled.add(m[1]);
 // Contract A (aa.zcode.v2): the Bridge service as the connector's client.py knows it.
-const contract = ['initialize', 'modelCatalog', 'sessionList', 'sessionRespond', 'sessionSelect', 'sessionSend',
-  'sessionStart', 'sessionStop', 'shutdown', 'sync'];
+const contract = ['initialize', 'modelCatalog', 'sessionList', 'sessionRespond', 'sessionResume', 'sessionSelect',
+  'sessionSend', 'sessionStart', 'sessionStop', 'shutdown', 'sync'];
 check('registered Bridge methods are exactly contract A', JSON.stringify(registered) === JSON.stringify(contract));
 check('every registered method is implemented, and no implementation is unregistered',
   JSON.stringify([...handled].sort()) === JSON.stringify(contract));
+// Protocol 0.3: the handshake reply carries the version and the optional methods from constants, so
+// a Connector talking to this build can tell it from one of protocol 0.2 (which has neither).
+check('handshake reply carries protocol 0.3 and the capability list, both from constants',
+  /protocolVersion: PROTOCOL_VERSION,/.test(src) && /capabilities: CAPABILITIES/.test(src)
+  && /const PROTOCOL_VERSION = '0\.3';/.test(src) && /const CAPABILITIES = \['sessionResume'\];/.test(src));
 
 const ws = JSON.parse(readFileSync(join(root, 'ws', 'package.json'), 'utf8'));
 check('vendored ws is pinned and keeps its licence', ws.name === 'ws' && /^\d+\.\d+\.\d+$/.test(ws.version) && existsSync(join(root, 'ws', 'LICENSE')));

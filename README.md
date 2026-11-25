@@ -3,14 +3,14 @@
 ZCode 的 Agents Anywhere 运行时桥插件（manifest 名 `aa-bridge-reg`）。它把 ZCode 的 app-server 接到 Agents Anywhere 的连接器上：AA 里的会话、时间线、审批卡片、模型与模式选择都经它落到 ZCode。
 
 - **契约**：契约 A（aa.zcode.v2）与契约 B 的定义在决策库的 [CONTRACT-aa-zcode-v2.md](https://github.com/rogerhik999-arch/agents-anywhere-zcode/blob/main/docs/CONTRACT-aa-zcode-v2.md)；各文档的关系见那里的 [docs/README.md](https://github.com/rogerhik999-arch/agents-anywhere-zcode/blob/main/docs/README.md)。契约要变，先改那边，再改这里。
-- **对端**：连接器（Agents Anywhere 的 fleet fork [agents-anywhere](https://github.com/rogerhik999-arch/agents-anywhere)，`connector/runtimes/zcode/bridge/`）。连接器只校验握手应答里的 `protocolVersion`。
+- **对端**：连接器（Agents Anywhere 的 fleet fork [agents-anywhere](https://github.com/rogerhik999-arch/agents-anywhere)，`connector/runtimes/zcode/bridge/`）。连接器只校验握手应答里的 `protocolVersion`。0.3.3 起握手应答为 `protocolVersion: "0.3"`，并用 `capabilities` 列出可选方法（现为 `sessionResume`）；0.3.2 及以前回答 `0.2`、没有这个列表，连接器据此决定发回合前要不要先恢复会话。
 
 ## 它怎么跑
 
 zcode 的插件宿主（`__zcode-plugin-host`）导入 `index.mjs` 并调用 `main()`。线上由连接器拉起这个宿主进程，并用会合文件 `~/.agents-anywhere/zcode-bridge/connector.json` 让插件找到连接器。插件随后：
 
-1. 在连接器的 Router 上注册 `aa.zcode.v2.Bridge`，方法是 `initialize` `sessionStart` `sessionSend` `sessionStop` `sessionList` `modelCatalog` `sessionSelect` `sessionRespond` `sync` `shutdown`；
-2. 按需启动 ZCode app-server（`node <zcode 引导包> app-server`，不启动 ZCode.app 本体）；
+1. 在连接器的 Router 上注册 `aa.zcode.v2.Bridge`，方法是 `initialize` `sessionStart` `sessionResume` `sessionSend` `sessionStop` `sessionList` `modelCatalog` `sessionSelect` `sessionRespond` `sync` `shutdown`；
+2. 按需启动 ZCode app-server（`node <zcode 引导包> app-server`，不启动 ZCode.app 本体）。连接器重启或插件被重新拉起后，app-server 是新进程，此前打开的会话要先用 `sessionResume` 恢复（`session/resume` + `session/subscribe`），否则 `session/setModel`、`session/send` 都报 `-32004 Session is not active`；
 3. 把 ZCode 的事件经 `aa.zcode.v2.Sync.ingestBatch` 批量推给连接器；
 4. 把 ZCode 的权限请求变成 AA 的审批卡片，由 AA 用户作答。
 
@@ -51,7 +51,7 @@ node --check index.mjs
 node tests/run.mjs
 ```
 
-`tests/run.mjs` 跑三个测试：权限映射（纯函数）、静态检查（manifest、注册的方法与实现一致）、沙箱启动（真的加载插件并调用 `main()`，查 ops 套接字，再 `SIGTERM`）。`AA_BRIDGE_ENTRY=/path/to/index.mjs` 让它们指向另一份拷贝。
+`tests/run.mjs` 跑五个测试：权限映射（纯函数）、静态检查（manifest、注册的方法与实现一致）、沙箱启动（真的加载插件并调用 `main()`，查 ops 套接字，再 `SIGTERM`）、事件同步队列（从源码里抽出队列函数来跑）、会话恢复（真的把插件跑起来，对端是替身的 Router 与替身的 app-server：握手、`sessionResume` 的顺序与错误原样透传）。`AA_BRIDGE_ENTRY=/path/to/index.mjs` 让它们指向另一份拷贝。
 
 ## 发行
 

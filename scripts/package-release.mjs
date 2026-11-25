@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const ref = process.argv[2] || 'HEAD';
 // Everything a host needs to run the plugin; tests, scripts and CI stay out of the zip.
-const shipped = ['plugin.json', 'index.mjs', 'CHANGELOG.md', 'README.md', 'ws'];
+// .zcode-plugin/plugin.json is ZCode's own format: without it `zcode plugins install` refuses the package.
+const shipped = ['.zcode-plugin/plugin.json', 'plugin.json', 'index.mjs', 'CHANGELOG.md', 'README.md', 'ws'];
 
 function git(args) {
   return spawnSync('git', args, { cwd: root, encoding: 'utf8' });

@@ -28,6 +28,8 @@ zcode 的插件宿主（`__zcode-plugin-host`）导入 `index.mjs` 并调用 `ma
 
 `node scripts/package-release.mjs v<版本>` 会原样打印这段条目。zip 来源要求这个仓库是公开的，或者 zcode 拿得到凭据。
 
+zip 里同时带 zcode 格式的清单 `.zcode-plugin/plugin.json`（版本与 `plugin.json` 一致），所以可以用 zcode 自己的命令装：`zcode plugins marketplace add <含 marketplace.json 的目录>`，然后 `zcode plugins install aa-bridge@aa-local`。0.3.3 及更早的 zip 没有这份清单，`zcode plugins install` 会报 `plugin_marketplace_invalid`，只能手工解包并改登记表。
+
 **连接器怎么找到插件**：fleet fork 的连接器自己拉起插件宿主，并按 zcode 的插件登记表找插件——`~/.zcode/cli/plugins/installed_plugins.json` 里 `aa-bridge@aa-local` 条目的 `installPath` 指向哪个版本就加载哪个；没有登记条目时取 `~/.zcode/cli/plugins/cache/aa-local/aa-bridge/` 下版本号最高的目录。换版本 = 用 zcode 装上新版本（登记表随之更新），然后重启连接器。连接器自己不钉版本（[fleet PR #14](https://github.com/rogerhik999-arch/agents-anywhere/pull/14) 之前它写死加载 0.2.2）。
 
 ## 路径
@@ -55,9 +57,9 @@ node tests/run.mjs
 
 ## 发行
 
-版本号只认 `plugin.json`；握手应答和日志里的名字也从它读出（`aa-bridge-reg@<版本>`）。
+版本号只认 `plugin.json`；握手应答和日志里的名字也从它读出（`aa-bridge-reg@<版本>`）。`.zcode-plugin/plugin.json` 是给 zcode 的安装器看的，版本跟着它（静态测试把关）。
 
-1. 改 `plugin.json` 的版本，在 `CHANGELOG.md` 顶部补一条，提交；
+1. 改 `plugin.json` 的版本（连同 `.zcode-plugin/plugin.json` 里的版本），在 `CHANGELOG.md` 顶部补一条，提交；
 2. `git tag v<版本>` 并推送；
 3. `node scripts/package-release.mjs v<版本>`：用 `git archive` 从这个 tag 出 `dist/aa-bridge-reg-<版本>.zip` 和 `.sha256`，再对解压出来的副本跑全部测试，不过就删包；
 4. `scripts/publish-release.sh v<版本> [发行说明.md]`：建这个 tag 的 GitHub Release（已有就复用，同名文件先替换），上传 zip 和 `.sha256`，再把两个文件经 API 下载回来与本地构建比对，不一致就报错退出。token 取自 `git credential fill`，不落盘不打印。marketplace 条目用打包脚本打印的那一段。

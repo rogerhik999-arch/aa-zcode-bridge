@@ -19,6 +19,13 @@ check('manifest version is x.y.z', /^\d+\.\d+\.\d+$/.test(String(manifest.versio
 check('manifest main exists next to the manifest', existsSync(join(root, String(manifest.main))));
 check('CHANGELOG has an entry for the manifest version',
   readFileSync(join(root, 'CHANGELOG.md'), 'utf8').includes(String(manifest.version)));
+// zcode installs a plugin from a marketplace only when the package carries a manifest in its own format
+// (.zcode-plugin/plugin.json); without it `zcode plugins install` answers plugin_marketplace_invalid.
+const zcode = JSON.parse(readFileSync(join(root, '.zcode-plugin', 'plugin.json'), 'utf8'));
+check('zcode manifest names the marketplace entry the Connector looks up', zcode.name === 'aa-bridge');
+check('zcode manifest carries the manifest version (the only version is plugin.json)', zcode.version === String(manifest.version));
+check('zcode manifest declares nothing for ZCode to run itself (the Connector starts the plugin)',
+  ['main', 'skills', 'commands', 'hooks', 'mcpServers'].every((key) => !(key in zcode)));
 
 check('source names no home directory', !/\/(Users|home)\//.test(src));
 check('the log and the ops socket default next to the rendezvous, never to a development directory',

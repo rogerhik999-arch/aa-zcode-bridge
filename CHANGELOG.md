@@ -1,5 +1,21 @@
 # aa-bridge plugin changelog
 
+## 0.3.4 (2026-11-25)
+
+The release zip installs through ZCode's own plugin manager. No change to what the plugin does.
+
+- Symptom (2026-11-25, zcode 0.17.3): `zcode plugins install aa-bridge@aa-local` answered `plugin_marketplace_invalid:
+  Plugin manifest not found`, and `zcode plugins list` reported `plugin_manifest_not_found` for a copy installed by hand.
+  ZCode's plugin loader looks for `.zcode-plugin/plugin.json`; the zip carried only this plugin's own `plugin.json`
+  at its root. The plugin still ran because the Connector starts it through the plugin host, which reads `index.mjs`
+  directly, so the gap was invisible to the bridge and visible to ZCode.
+- The zip now also carries `.zcode-plugin/plugin.json`: `name` `aa-bridge` (the marketplace entry the Connector looks
+  up), the same `version` as `plugin.json`, and nothing ZCode would run itself (no skills, commands, hooks or servers).
+  A static test fails when the two versions differ.
+- Verified in a throwaway HOME seeded with copies of the real registries: `zcode plugins marketplace add <dir>`, then
+  `zcode plugins install aa-bridge@aa-local`, answered `Installed plugin aa-bridge@aa-local [enabled]`; the entry the
+  installer wrote carries the zip source and its sha256, and the Connector resolves it unchanged.
+
 ## 0.3.3 (2026-11-25)
 
 Resume an existing session in the host that is running now (`sessionResume`; handshake protocol `0.3`).

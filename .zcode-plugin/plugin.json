@@ -1,0 +1,6 @@
+{
+  "name": "aa-bridge",
+  "version": "0.3.4",
+  "description": "Agents Anywhere runtime bridge for ZCode (contract aa.zcode.v2). Started by the Connector through the plugin host; declares no skills, commands, hooks or servers, so ZCode itself runs nothing from it.",
+  "author": { "name": "rogerhik999-arch" }
+}
